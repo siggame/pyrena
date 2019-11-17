@@ -50,12 +50,13 @@ GAMESERVER_HOST = os.getenv('GAMESERVER_HOST', 'localhost')
 GAMESERVER_TCPPORT = os.getenv('GAMESERVER_TCPPORT', '3000')
 GAMESERVER_WEBPORT = os.getenv('GAMESERVER_WEBPORT', '3080')
 DROOPY_URL = os.getenv('DROOPY_URL', 'http://localhost:8000/') # Note trailing slash
+VIS_LOG_URI = os.getenv('VIS_LOG_URI', 'http://vis.siggame.io/?log=')
 DROOPY_CREDS = os.getenv('DROOPY_CREDS', 'USER:PASS')  # Leave empty for no creds
 DOCKERFILE_PATH = os.getenv('DOCKERFILE_PATH', '/per_language_dockerfiles')
 RUN_FOREVER = os.getenv('RUN_FOREVER', False)
 LOGFILE_PATH = os.getenv('LOGFILE_PATH', '/tmp/pyrena_logfiles')
 SUBMISSION_CACHE_PATH = os.getenv('SUBMISSION_CACHE_PATH', '/tmp/submission_cache')
-LOOKBACK_SECONDS = int(os.getenv('LOOKBACK_SECONDS', 60*60*1))
+LOOKBACK_SECONDS = int(os.getenv('LOOKBACK_SECONDS', 60))
 CONTAINER_CPU = os.getenv('CONTAINER_CPU', '0.5')
 CONTAINER_RAM = os.getenv('CONTAINER_RAM', '1g')
 MATCH_TIMEOUT = int(os.getenv('MATCH_TIMEOUT', 60*5))
@@ -69,7 +70,6 @@ def main():
     logging.info(f'connecting to database "{DB_NAME}" at {DB_USER}@{DB_HOST}:{DB_PORT}')
     conn = psycopg2.connect(dbname=DB_NAME,
             user=DB_USER,
-            password=DB_PASS,
             host=DB_HOST,
             port=DB_PORT,
             connect_timeout=10,
@@ -140,7 +140,9 @@ def main():
             gamelog_name = match_status['gamelogFilename']
             local_gamelog_path = download_gamelog(gamelog_name)
             droopy_gamelog_url = upload_file_to_droopy(local_gamelog_path, gamelog_name)
-            update_game_succeeded(conn, win_reason, lose_reason, winner_id, droopy_gamelog_url, game_id)
+            update_game_succeeded(
+                conn, win_reason, lose_reason, winner_id, VIS_LOG_URI + droopy_gamelog_url, game_id
+            )
         except Exception as e:
             logging.warning(traceback.format_exc())
             if game_id is not None:
@@ -362,12 +364,22 @@ def submission_joueur_folder(submission_id):
     return joueur_path
 
 def verify_submission_contents(submission_id):
+    unzipped_folder = unzipped_submission_folder(submission_id)
     joueur_path = submission_joueur_folder(submission_id)
     dirpath, dirnames, filenames = next(os.walk(joueur_path))
     if 'Makefile' not in filenames and 'makefile' not in filenames:
         raise Exception(f'Submission {unzipped_folder} does not have "Makefile"')
     if 'run' not in filenames:
         raise Exception(f'Submission {unzipped_folder} does not have "run" file')
+
+    success = []
+    for x in ["games/Necrowar", "games/necrowar", "Games/Necrowar", "Games/necrowar"]:
+        success.append(os.path.exists(os.path.join(joueur_path, x)))
+    if not any(success):
+        raise Exception(
+            f'Submission {unzipped_folder} does not have the necrowar game file in "games/"'
+        )
+
 
 def report_prebuild_failure(conn, submission_id, error_message):
     filename = f'prebuild_failure_{submission_id}'

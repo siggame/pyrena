@@ -406,7 +406,7 @@ class HTTPUploadHandler(httpserver.BaseHTTPRequestHandler):
             headers = {'Content-length': os.fstat(f.fileno())[6],
                        'Content-type': mimetypes.guess_type(localpath)[0],
                        'Access-Control-Allow-Origin': '*'}
-            if 'Blobmaster-' in localpath:
+            if 'Necrowar-' in localpath:
                 headers['Content-Encoding'] = 'gzip'
                 headers['Content-Type'] = 'application/json'
             self.send_resp_headers(200, headers, end=True)
